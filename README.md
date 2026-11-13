@@ -26,6 +26,7 @@ Tap the cable buttons to creep. Hold them to run.
 - Land a piece at a run, hit a column, or miss the anchor bolts and it counts as a bang.
 - Clean sets in a row stack a score multiplier. Finishing a level pays a bonus. Bangs cost points and reset the multiplier.
 - Wind picks up every floor.
+- Finish with a top 20 score and you post your initials to the high score board. Scores are saved in the browser on that device. There is no server, so every device has its own board.
 
 ## Files
 

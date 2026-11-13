@@ -80,6 +80,22 @@ h1 em{font-style:normal;display:block;color:var(--ink);background:var(--bone);pa
 .tally div:last-child{border-right:0}
 .tally b{display:block;font:600 10px/1 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
 .tally span{font:800 22px/1.1 var(--display);font-variant-numeric:tabular-nums}
+.sheet{overflow-y:auto;touch-action:pan-y}
+.tops{font:600 13px/1.3 var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--mute);font-variant-numeric:tabular-nums}
+.init{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.init[hidden],.tops[hidden],.bhead[hidden]{display:none}
+.init label{font:700 12px/1 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--hivis)}
+.init input{width:3.6em;background:var(--ink);color:var(--bone);border:2px solid var(--hivis);border-radius:4px;padding:6px 8px 4px;
+  font:900 28px/1 var(--display);letter-spacing:.14em;text-transform:uppercase;text-align:center;-webkit-user-select:text;user-select:text;touch-action:manipulation}
+.init input:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.init .go{font-size:18px;padding:11px 16px 9px;box-shadow:0 4px 0 #8a6d00}
+.bhead{font:700 12px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--mute);margin-bottom:-6px}
+.board{list-style:none;border-top:1px solid rgba(241,236,225,.22)}
+.board li{display:grid;grid-template-columns:2.2em 3.4em 1fr auto 5.4em;gap:8px;align-items:baseline;padding:5px 2px 3px;
+  border-bottom:1px solid rgba(241,236,225,.12);font:800 19px/1.1 var(--display);font-variant-numeric:tabular-nums;letter-spacing:.04em}
+.board li span:first-child,.board li span:nth-child(n+4){font:600 13px/1 var(--body);color:var(--mute);letter-spacing:.06em}
+.board li span:nth-child(n+4){text-align:right}
+.board li.me{color:var(--hivis)}
 @media (max-height:560px){h1{font-size:54px}.how{display:none}.radio p{font-size:22px}.lever{height:50px}}
 @media (prefers-reduced-motion:reduce){.hint{transition:none}}
 </style>
@@ -116,6 +132,7 @@ h1 em{font-style:normal;display:block;color:var(--ink);background:var(--bone);pa
       <b>Score</b><span>Clean sets stack a multiplier. Finish a level for a bonus. Bangs cost you.</span>
     </ul>
     <button class="go" id="btnStart" type="button">Clock in</button>
+    <p class="tops" id="tops" hidden></p>
   </div>
 </section>
 
@@ -130,6 +147,13 @@ h1 em{font-style:normal;display:block;color:var(--ink);background:var(--bone);pa
       <div><b>Bangs</b><span id="eBang">0</span></div>
       <div><b>Buttered</b><span id="eButter">0</span></div>
     </div>
+    <form class="init" id="initForm" hidden>
+      <label for="initials">Your initials</label>
+      <input id="initials" name="initials" type="text" maxlength="3" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" inputmode="text">
+      <button class="go" type="submit">Post score</button>
+    </form>
+    <p class="bhead" id="boardHead" hidden>High scores on this device</p>
+    <ol class="board" id="board" hidden></ol>
     <button class="go" id="btnAgain" type="button">Run it back</button>
   </div>
 </section>
@@ -197,8 +221,29 @@ const S = {
 };
 const B = { bx: 0, top: 0, bot: 0, vx: 0, hx: 0, hy: 0 };
 const sparks = [], pops = [];
-let best = null;
-try { const b = +localStorage.getItem('toppingout.score'); if (b > 0) best = b; } catch (e) {}
+
+/* ---------- leaderboard. Kept on this device; swap load/add here to point it at a shared backend. ---------- */
+const Board = {
+  key: 'toppingout.board', list: [],
+  load() { try { const a = JSON.parse(localStorage.getItem(this.key) || '[]'); if (Array.isArray(a)) this.list = a.filter(e => e && typeof e.s === 'number' && typeof e.n === 'string').slice(0, 20); } catch (e) {} },
+  add(e) { this.list.push(e); this.list.sort((a, b) => b.s - a.s || a.t - b.t); this.list = this.list.slice(0, 20); try { localStorage.setItem(this.key, JSON.stringify(this.list)); } catch (err) {} return this.list.indexOf(e); },
+  qualifies(sc) { return sc > 0 && (this.list.length < 20 || sc > this.list[this.list.length - 1].s); }
+};
+Board.load();
+let pending = null;
+function renderBoard(me) {
+  const ol = $('board'); ol.textContent = '';
+  const rows = Board.list.slice(0, 5).map((e, i) => [i, e]);
+  if (me > 4) rows.push([me, Board.list[me]]);
+  for (const [i, e] of rows) {
+    const li = document.createElement('li'); if (i === me) li.className = 'me';
+    for (const v of [String(i + 1).padStart(2, '0'), e.n, e.s.toLocaleString('en-US'), fmt(e.t | 0), (e.b | 0) + ((e.b | 0) === 1 ? ' bang' : ' bangs')]) { const sp = document.createElement('span'); sp.textContent = v; li.appendChild(sp); }
+    ol.appendChild(li);
+  }
+  ol.hidden = !rows.length; $('boardHead').hidden = !rows.length;
+  const tops = $('tops'); tops.hidden = !Board.list.length;
+  tops.textContent = Board.list.length ? 'High scores   ' + Board.list.slice(0, 3).map(e => `${e.n} ${e.s.toLocaleString('en-US')}`).join('  ·  ') : '';
+}
 
 const tier = () => S.floor >> 1;
 const colLen = t => t === 0 ? 2 * FH + STUB : 2 * FH;
@@ -339,15 +384,17 @@ function setCol(i) {
   say(soft ? 'Buttered it. Cut it loose.' : pick([t ? 'Splice is made. Cut it loose.' : "She's on the bolts. Cut it loose.", "She's plumb. Send the next one.", 'Got it. Cut it loose.']), 1.4);
 }
 function finish() {
-  const t = S.time; let isBest = false;
-  if (best == null || S.score > best) { best = S.score; isBest = true; try { localStorage.setItem('toppingout.score', String(S.score)); } catch (e) {} }
+  const t = S.time, isBest = S.score > 0 && (!Board.list.length || S.score > Board.list[0].s);
   let gr;
   if (S.bangs === 0 && t <= 210) gr = ['Raising gang foreman', 'Clean iron and a quick hook. Somebody buy this operator lunch.'];
   else if (S.bangs <= 3 && t <= 300) gr = ['Journeyman', 'Good day. Both connectors still have all ten fingers.'];
   else if (S.bangs <= 7) gr = ['Apprentice', "It's up and it's plumb enough. The connectors would like a word."];
   else gr = ['First day on the iron', "The building's up. So is everybody's blood pressure."];
-  $('eGrade').textContent = gr[0]; $('eLine').textContent = gr[1] + (isBest ? ' New high score.' : ` High score ${best.toLocaleString('en-US')}.`);
+  $('eGrade').textContent = gr[0]; $('eLine').textContent = gr[1] + (isBest ? ' New high score.' : '');
   $('eScore').textContent = S.score.toLocaleString('en-US'); $('eTime').textContent = fmt(t); $('eBang').textContent = S.bangs; $('eButter').textContent = S.butter;
+  const q = Board.qualifies(S.score); pending = q ? { s: S.score, t: Math.round(t), b: S.bangs } : null;
+  $('initForm').hidden = !q; renderBoard(-1);
+  if (q) { let last = ''; try { last = localStorage.getItem('toppingout.initials') || ''; } catch (e) {} $('initials').value = last; }
 }
 function reset() {
   Object.assign(S, { floor: 0, placed: [], cols: [], idx: 0, time: 0, bangs: 0, butter: 0, score: 0, combo: 0, flash: 0, bannerT: 0, camOff: 0, doneT: 0, msgT: 0, tt: S.tx });
@@ -734,17 +781,24 @@ function lever(el, key) {
 }
 lever($('btnUp'), 'bu'); lever($('btnDown'), 'bd');
 const KEYS = { ArrowLeft: 'kl', a: 'kl', A: 'kl', ArrowRight: 'kr', d: 'kr', D: 'kr', ArrowUp: 'ku', w: 'ku', W: 'ku', ArrowDown: 'kd', s: 'kd', S: 'kd' };
-addEventListener('keydown', e => { const k = KEYS[e.key]; if (k) { S[k] = 1; e.preventDefault(); $('hint').classList.add('gone'); } });
+addEventListener('keydown', e => { if (e.target && e.target.tagName === 'INPUT') return; const k = KEYS[e.key]; if (k) { S[k] = 1; e.preventDefault(); $('hint').classList.add('gone'); } });
 addEventListener('keyup', e => { const k = KEYS[e.key]; if (k) S[k] = 0; });
 addEventListener('blur', () => { S.kl = S.kr = S.ku = S.kd = S.bu = S.bd = 0; });
 addEventListener('contextmenu', e => e.preventDefault());
 $('btnStart').addEventListener('click', () => { initAudio(); reset(); });
 $('btnAgain').addEventListener('click', () => { initAudio(); reset(); });
+$('initForm').addEventListener('submit', e => {
+  e.preventDefault(); if (!pending) return;
+  const n = $('initials').value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3) || 'AAA';
+  const entry = Object.assign({ n }, pending); pending = null; const i = Board.add(entry);
+  try { localStorage.setItem('toppingout.initials', n); } catch (err) {}
+  $('initForm').hidden = true; $('initials').blur(); renderBoard(i);
+});
 $('btnMute').addEventListener('click', () => { muted = !muted; const b = $('btnMute'); b.setAttribute('aria-pressed', String(!muted)); b.innerHTML = muted ? 'Sound<br>off' : 'Sound<br>on'; if (!muted) initAudio(); });
 
 /* ---------- boot (keeps a run alive across a republish) ---------- */
 function start(data) {
-  resize(); kin();
+  resize(); kin(); renderBoard(-1);
   if (data && data.v === 2 && data.started && data.idx < TOTAL) {
     Object.assign(S, { floor: data.floor | 0, placed: Array.isArray(data.placed) ? data.placed : [], cols: Array.isArray(data.cols) ? data.cols : [], idx: data.idx | 0, score: data.score | 0, time: +data.time || 0, bangs: data.bangs | 0, butter: data.butter | 0 });
     $('startSheet').hidden = true; document.body.classList.remove('sheeted'); newPiece();
